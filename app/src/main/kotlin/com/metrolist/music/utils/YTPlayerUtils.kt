@@ -24,6 +24,7 @@ import com.metrolist.innertube.models.YouTubeClient.Companion.WEB
 import com.metrolist.innertube.models.YouTubeClient.Companion.WEB_CREATOR
 import com.metrolist.innertube.models.YouTubeClient.Companion.WEB_REMIX
 import com.metrolist.innertube.models.response.PlayerResponse
+import com.metrolist.innertube.utils.PoTokenProvider
 import okhttp3.OkHttpClient
 import timber.log.Timber
 
@@ -43,21 +44,38 @@ object YTPlayerUtils {
      * - premium formats
      */
     private val MAIN_CLIENT: YouTubeClient = WEB_REMIX
+    
     /**
      * Clients used for fallback streams in case the streams of the main client do not work.
+     * Order is important - clients that work better with age-restricted content are prioritized.
      */
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
-        ANDROID_VR_1_61_48,
-        ANDROID_VR_1_43_32,
-        ANDROID_CREATOR,
-        IPADOS,
-        ANDROID_VR_NO_AUTH,
-        MOBILE,
+        // TVHTML5 clients often work better for age-restricted content
         TVHTML5,
         TVHTML5_SIMPLY_EMBEDDED_PLAYER,
+        // Android VR clients are good fallbacks
+        ANDROID_VR_1_61_48,
+        ANDROID_VR_1_43_32,
+        ANDROID_VR_NO_AUTH,
+        // Other clients
+        ANDROID_CREATOR,
+        IPADOS,
+        MOBILE,
         IOS,
         WEB,
         WEB_CREATOR
+    )
+    
+    /**
+     * Clients specifically optimized for age-restricted content.
+     * These are tried first when age-restriction is detected.
+     */
+    private val AGE_RESTRICTED_CLIENTS: Array<YouTubeClient> = arrayOf(
+        TVHTML5_SIMPLY_EMBEDDED_PLAYER,
+        TVHTML5,
+        ANDROID_VR_NO_AUTH,
+        ANDROID_VR_1_61_48,
+        ANDROID_VR_1_43_32
     )
     data class PlaybackData(
         val audioConfig: PlayerResponse.PlayerConfig.AudioConfig?,
@@ -71,6 +89,10 @@ object YTPlayerUtils {
      * Custom player response intended to use for playback.
      * Metadata like audioConfig and videoDetails are from [MAIN_CLIENT].
      * Format & stream can be from [MAIN_CLIENT] or [STREAM_FALLBACK_CLIENTS].
+     * 
+     * For age-restricted content, this function will:
+     * 1. Try to get a poToken from external server if configured
+     * 2. Use specialized clients (TVHTML5, ANDROID_VR) that work better with age-restricted content
      */
     suspend fun playerResponseForPlayback(
         videoId: String,
@@ -99,9 +121,21 @@ object YTPlayerUtils {
             }
         Timber.tag(logTag).d("Session authentication status: ${if (isLoggedIn) "Logged in" else "Not logged in"}")
 
+        // Try to get poToken from external provider
+        val poTokenResponse = try {
+            PoTokenProvider.getPoToken(YouTube.visitorData, videoId)
+        } catch (e: Exception) {
+            Timber.tag(logTag).w(e, "Failed to get poToken, continuing without it")
+            null
+        }
+        val poToken = poTokenResponse?.poToken
+        if (poToken != null) {
+            Timber.tag(logTag).d("Using poToken for request")
+        }
+
         Timber.tag(logTag).d("Attempting to get player response using MAIN_CLIENT: ${MAIN_CLIENT.clientName}")
         val mainPlayerResponse =
-            YouTube.player(videoId, playlistId, MAIN_CLIENT, signatureTimestamp).getOrThrow()
+            YouTube.player(videoId, playlistId, MAIN_CLIENT, signatureTimestamp, poToken).getOrThrow()
         val audioConfig = mainPlayerResponse.playerConfig?.audioConfig
         val videoDetails = mainPlayerResponse.videoDetails
         val playbackTracking = mainPlayerResponse.playbackTracking
@@ -109,8 +143,22 @@ object YTPlayerUtils {
         var streamUrl: String? = null
         var streamExpiresInSeconds: Int? = null
         var streamPlayerResponse: PlayerResponse? = null
+        
+        // Check if content might be age-restricted based on main response
+        val isAgeRestricted = isAgeRestrictedResponse(mainPlayerResponse)
+        if (isAgeRestricted) {
+            Timber.tag(logTag).d("Content appears to be age-restricted, trying specialized clients first")
+        }
+        
+        // Determine which clients to try based on whether content is age-restricted
+        val clientsToTry = if (isAgeRestricted) {
+            // For age-restricted content, try specialized clients first
+            AGE_RESTRICTED_CLIENTS + STREAM_FALLBACK_CLIENTS.filter { it !in AGE_RESTRICTED_CLIENTS }
+        } else {
+            STREAM_FALLBACK_CLIENTS.toList()
+        }.toTypedArray()
 
-        for (clientIndex in (-1 until STREAM_FALLBACK_CLIENTS.size)) {
+        for (clientIndex in (-1 until clientsToTry.size)) {
             // reset for each client
             format = null
             streamUrl = null
@@ -119,14 +167,18 @@ object YTPlayerUtils {
             // decide which client to use for streams and load its player response
             val client: YouTubeClient
             if (clientIndex == -1) {
-                // try with streams from main client first
+                // try with streams from main client first (skip if age-restricted)
+                if (isAgeRestricted && mainPlayerResponse.playabilityStatus.status != "OK") {
+                    Timber.tag(logTag).d("Skipping MAIN_CLIENT for age-restricted content")
+                    continue
+                }
                 client = MAIN_CLIENT
                 streamPlayerResponse = mainPlayerResponse
                 Timber.tag(logTag).d("Trying stream from MAIN_CLIENT: ${client.clientName}")
             } else {
                 // after main client use fallback clients
-                client = STREAM_FALLBACK_CLIENTS[clientIndex]
-                Timber.tag(logTag).d("Trying fallback client ${clientIndex + 1}/${STREAM_FALLBACK_CLIENTS.size}: ${client.clientName}")
+                client = clientsToTry[clientIndex]
+                Timber.tag(logTag).d("Trying fallback client ${clientIndex + 1}/${clientsToTry.size}: ${client.clientName}")
 
                 if (client.loginRequired && !isLoggedIn && YouTube.cookie == null) {
                     // skip client if it requires login but user is not logged in
@@ -135,13 +187,17 @@ object YTPlayerUtils {
                 }
 
                 Timber.tag(logTag).d("Fetching player response for fallback client: ${client.clientName}")
+                // Use poToken for web-based clients
+                val usePoToken = poToken.takeIf { 
+                    client.clientName.contains("WEB") || client.clientName.contains("TVHTML5") 
+                }
                 streamPlayerResponse =
-                    YouTube.player(videoId, playlistId, client, signatureTimestamp).getOrNull()
+                    YouTube.player(videoId, playlistId, client, signatureTimestamp, usePoToken).getOrNull()
             }
 
             // process current client response
             if (streamPlayerResponse?.playabilityStatus?.status == "OK") {
-                Timber.tag(logTag).d("Player response status OK for client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else STREAM_FALLBACK_CLIENTS[clientIndex].clientName}")
+                Timber.tag(logTag).d("Player response status OK for client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else clientsToTry[clientIndex].clientName}")
 
                 format =
                     findFormat(
@@ -151,7 +207,7 @@ object YTPlayerUtils {
                     )
 
                 if (format == null) {
-                    Timber.tag(logTag).d("No suitable format found for client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else STREAM_FALLBACK_CLIENTS[clientIndex].clientName}")
+                    Timber.tag(logTag).d("No suitable format found for client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else clientsToTry[clientIndex].clientName}")
                     continue
                 }
 
@@ -171,18 +227,18 @@ object YTPlayerUtils {
 
                 Timber.tag(logTag).d("Stream expires in: $streamExpiresInSeconds seconds")
 
-                if (clientIndex == STREAM_FALLBACK_CLIENTS.size - 1) {
+                if (clientIndex == clientsToTry.size - 1) {
                     /** skip [validateStatus] for last client */
-                    Timber.tag(logTag).d("Using last fallback client without validation: ${STREAM_FALLBACK_CLIENTS[clientIndex].clientName}")
+                    Timber.tag(logTag).d("Using last fallback client without validation: ${clientsToTry[clientIndex].clientName}")
                     break
                 }
 
                 if (validateStatus(streamUrl)) {
                     // working stream found
-                    Timber.tag(logTag).d("Stream validated successfully with client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else STREAM_FALLBACK_CLIENTS[clientIndex].clientName}")
+                    Timber.tag(logTag).d("Stream validated successfully with client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else clientsToTry[clientIndex].clientName}")
                     break
                 } else {
-                    Timber.tag(logTag).d("Stream validation failed for client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else STREAM_FALLBACK_CLIENTS[clientIndex].clientName}")
+                    Timber.tag(logTag).d("Stream validation failed for client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else clientsToTry[clientIndex].clientName}")
                 }
             } else {
                 Timber.tag(logTag).d("Player response status not OK: ${streamPlayerResponse?.playabilityStatus?.status}, reason: ${streamPlayerResponse?.playabilityStatus?.reason}")
@@ -229,6 +285,24 @@ object YTPlayerUtils {
             streamExpiresInSeconds,
         )
     }
+    
+    /**
+     * Check if the player response indicates age-restricted content.
+     */
+    private fun isAgeRestrictedResponse(response: PlayerResponse): Boolean {
+        val status = response.playabilityStatus.status
+        val reason = response.playabilityStatus.reason?.lowercase() ?: ""
+        
+        return status != "OK" && (
+            reason.contains("age") ||
+            reason.contains("sign in") ||
+            reason.contains("login") ||
+            reason.contains("confirm") ||
+            reason.contains("restricted") ||
+            reason.contains("verify")
+        )
+    }
+    
     /**
      * Simple player response intended to use for metadata only.
      * Stream URLs of this response might not work so don't use them.
