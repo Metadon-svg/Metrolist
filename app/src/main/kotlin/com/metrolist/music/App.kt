@@ -23,6 +23,7 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.YouTubeLocale
+import com.metrolist.innertube.utils.PoTokenProvider
 import com.metrolist.kugou.KuGou
 import com.metrolist.lastfm.LastFM
 import com.metrolist.music.BuildConfig
@@ -32,6 +33,7 @@ import com.metrolist.music.extensions.toEnum
 import com.metrolist.music.extensions.toInetSocketAddress
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.get
+import com.metrolist.music.utils.potoken.PoTokenGenerator
 import com.metrolist.music.utils.reportException
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -56,10 +58,16 @@ class App : Application(), SingletonImageLoader.Factory {
     @Inject
     @ApplicationScope
     lateinit var applicationScope: CoroutineScope
+    
+    private var poTokenGenerator: PoTokenGenerator? = null
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         Timber.plant(Timber.DebugTree())
+        
+        // Initialize internal PoToken generator
+        initializePoTokenGenerator()
 
         // تهيئة إعدادات التطبيق عند الإقلاع
         applicationScope.launch {
@@ -67,7 +75,25 @@ class App : Application(), SingletonImageLoader.Factory {
             observeSettingsChanges()
         }
     }
-
+    
+    private fun initializePoTokenGenerator() {
+        try {
+            poTokenGenerator = PoTokenGenerator(this)
+            PoTokenProvider.internalGenerator = object : PoTokenProvider.InternalPoTokenGenerator {
+                override fun generatePoToken(videoId: String, sessionId: String): Pair<String, String>? {
+                    return poTokenGenerator?.getWebClientPoToken(videoId, sessionId)?.let {
+                        Pair(it.playerRequestPoToken, it.streamingDataPoToken)
+                    }
+                }
+            }
+            PoTokenProvider.useInternalGenerator = true
+            Timber.d("PoToken generator initialized successfully")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to initialize PoToken generator")
+            PoTokenProvider.useInternalGenerator = false
+        }
+    }
+    
     private suspend fun initializeSettings() {
         val settings = dataStore.data.first()
         val locale = Locale.getDefault()
@@ -218,6 +244,10 @@ class App : Application(), SingletonImageLoader.Factory {
     }
 
     companion object {
+        @Volatile
+        lateinit var instance: App
+            private set
+            
         suspend fun forgetAccount(context: Context) {
             context.dataStore.edit { settings ->
                 settings.remove(InnerTubeCookieKey)

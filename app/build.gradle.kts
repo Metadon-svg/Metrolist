@@ -268,4 +268,7 @@ dependencies {
 
     // Icons
     implementation(libs.androidx.material.icons.extended)
+    
+    // WebView support for PoToken generation
+    implementation(libs.webkit)
 }

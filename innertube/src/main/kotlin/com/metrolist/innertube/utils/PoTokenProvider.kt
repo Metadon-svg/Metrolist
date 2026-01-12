@@ -24,6 +24,7 @@ object PoTokenProvider {
     data class PoTokenResponse(
         val poToken: String,
         val visitorData: String,
+        val streamingPoToken: String? = null,
         val expiresAt: Long? = null
     )
     
@@ -32,6 +33,14 @@ object PoTokenProvider {
         val visitorData: String? = null,
         val videoId: String? = null
     )
+    
+    /**
+     * Interface for internal poToken generation using WebView.
+     * This should be implemented in the app module.
+     */
+    interface InternalPoTokenGenerator {
+        fun generatePoToken(videoId: String, sessionId: String): Pair<String, String>?
+    }
     
     private val mutex = Mutex()
     private var cachedToken: PoTokenResponse? = null
@@ -47,6 +56,12 @@ object PoTokenProvider {
     // Manual poToken override (for users who want to provide their own token)
     var manualPoToken: String? = null
     var manualVisitorData: String? = null
+    
+    // Internal WebView-based poToken generator
+    var internalGenerator: InternalPoTokenGenerator? = null
+    
+    // Enable internal poToken generation (default: true)
+    var useInternalGenerator: Boolean = true
     
     private val httpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) {
@@ -64,7 +79,7 @@ object PoTokenProvider {
     }
     
     /**
-     * Get a valid poToken, either from cache, manual override, or external server.
+     * Get a valid poToken, either from cache, manual override, internal generator, or external server.
      * @param visitorData The visitor data to use for token generation
      * @param videoId Optional video ID for video-specific tokens
      * @return PoTokenResponse or null if unavailable
@@ -76,6 +91,22 @@ object PoTokenProvider {
                 poToken = token,
                 visitorData = manualVisitorData ?: visitorData ?: ""
             )
+        }
+        
+        // Try internal WebView-based generator
+        if (useInternalGenerator && videoId != null) {
+            val sessionId = visitorData ?: ""
+            try {
+                internalGenerator?.generatePoToken(videoId, sessionId)?.let { (playerPot, streamingPot) ->
+                    return PoTokenResponse(
+                        poToken = playerPot,
+                        visitorData = visitorData ?: "",
+                        streamingPoToken = streamingPot
+                    )
+                }
+            } catch (e: Exception) {
+                // Fall through to external server
+            }
         }
         
         return mutex.withLock {
@@ -130,9 +161,9 @@ object PoTokenProvider {
     }
     
     /**
-     * Check if poToken is available (either manual or from server).
+     * Check if poToken is available (either manual, internal generator, or from server).
      */
     fun isAvailable(): Boolean {
-        return manualPoToken != null || serverUrl != null
+        return manualPoToken != null || (useInternalGenerator && internalGenerator != null) || serverUrl != null
     }
 }
