@@ -151,12 +151,12 @@ object YTPlayerUtils {
         }
         
         // Determine which clients to try based on whether content is age-restricted
-        val clientsToTry = if (isAgeRestricted) {
+        val clientsToTry: Array<YouTubeClient> = if (isAgeRestricted) {
             // For age-restricted content, try specialized clients first
-            AGE_RESTRICTED_CLIENTS + STREAM_FALLBACK_CLIENTS.filter { it !in AGE_RESTRICTED_CLIENTS }
+            (AGE_RESTRICTED_CLIENTS.toList() + STREAM_FALLBACK_CLIENTS.filter { it !in AGE_RESTRICTED_CLIENTS }).toTypedArray()
         } else {
-            STREAM_FALLBACK_CLIENTS.toList()
-        }.toTypedArray()
+            STREAM_FALLBACK_CLIENTS
+        }
 
         for (clientIndex in (-1 until clientsToTry.size)) {
             // reset for each client
@@ -188,7 +188,7 @@ object YTPlayerUtils {
 
                 Timber.tag(logTag).d("Fetching player response for fallback client: ${client.clientName}")
                 // Use poToken for web-based clients
-                val usePoToken = poToken.takeIf { 
+                val usePoToken = poToken?.takeIf {
                     client.clientName.contains("WEB") || client.clientName.contains("TVHTML5") 
                 }
                 streamPlayerResponse =
@@ -197,7 +197,8 @@ object YTPlayerUtils {
 
             // process current client response
             if (streamPlayerResponse?.playabilityStatus?.status == "OK") {
-                Timber.tag(logTag).d("Player response status OK for client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else clientsToTry[clientIndex].clientName}")
+                val currentClientName = if (clientIndex == -1) MAIN_CLIENT.clientName else client.clientName
+                Timber.tag(logTag).d("Player response status OK for client: $currentClientName")
 
                 format =
                     findFormat(
@@ -207,7 +208,7 @@ object YTPlayerUtils {
                     )
 
                 if (format == null) {
-                    Timber.tag(logTag).d("No suitable format found for client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else clientsToTry[clientIndex].clientName}")
+                    Timber.tag(logTag).d("No suitable format found for client: $currentClientName")
                     continue
                 }
 
@@ -229,16 +230,16 @@ object YTPlayerUtils {
 
                 if (clientIndex == clientsToTry.size - 1) {
                     /** skip [validateStatus] for last client */
-                    Timber.tag(logTag).d("Using last fallback client without validation: ${clientsToTry[clientIndex].clientName}")
+                    Timber.tag(logTag).d("Using last fallback client without validation: $currentClientName")
                     break
                 }
 
                 if (validateStatus(streamUrl)) {
                     // working stream found
-                    Timber.tag(logTag).d("Stream validated successfully with client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else clientsToTry[clientIndex].clientName}")
+                     Timber.tag(logTag).d("Stream validated successfully with client: $currentClientName")
                     break
                 } else {
-                    Timber.tag(logTag).d("Stream validation failed for client: ${if (clientIndex == -1) MAIN_CLIENT.clientName else clientsToTry[clientIndex].clientName}")
+                    Timber.tag(logTag).d("Stream validation failed for client: $currentClientName")
                 }
             } else {
                 Timber.tag(logTag).d("Player response status not OK: ${streamPlayerResponse?.playabilityStatus?.status}, reason: ${streamPlayerResponse?.playabilityStatus?.reason}")
