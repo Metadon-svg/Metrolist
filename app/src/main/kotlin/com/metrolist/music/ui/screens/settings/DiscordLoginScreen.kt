@@ -70,6 +70,7 @@ fun DiscordLoginScreen(navController: NavController) {
 
                 webViewClient = object : WebViewClient() {
                     @Deprecated("Deprecated in Java")
+                    @Suppress("OVERRIDE_DEPRECATION")
                     override fun shouldOverrideUrlLoading(
                         view: WebView,
                         url: String,
