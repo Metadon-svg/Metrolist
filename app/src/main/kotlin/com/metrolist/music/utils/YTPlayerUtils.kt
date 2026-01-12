@@ -20,6 +20,7 @@ import com.metrolist.innertube.models.YouTubeClient.Companion.IPADOS
 import com.metrolist.innertube.models.YouTubeClient.Companion.MOBILE
 import com.metrolist.innertube.models.YouTubeClient.Companion.TVHTML5
 import com.metrolist.innertube.models.YouTubeClient.Companion.TVHTML5_SIMPLY_EMBEDDED_PLAYER
+import com.metrolist.innertube.models.YouTubeClient.Companion.TV_EMBEDDED
 import com.metrolist.innertube.models.YouTubeClient.Companion.WEB
 import com.metrolist.innertube.models.YouTubeClient.Companion.WEB_CREATOR
 import com.metrolist.innertube.models.YouTubeClient.Companion.WEB_REMIX
@@ -50,18 +51,21 @@ object YTPlayerUtils {
      * Order is important - clients that work better with age-restricted content are prioritized.
      */
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
+        // TV embedded client - best for age-restricted content without login
+        TV_EMBEDDED,
         // TVHTML5 clients often work better for age-restricted content
-        TVHTML5,
         TVHTML5_SIMPLY_EMBEDDED_PLAYER,
+        TVHTML5,
         // Android VR clients are good fallbacks
+        ANDROID_VR_NO_AUTH,
         ANDROID_VR_1_61_48,
         ANDROID_VR_1_43_32,
-        ANDROID_VR_NO_AUTH,
+        // iOS clients - often work for age-restricted
+        IOS,
+        IPADOS,
         // Other clients
         ANDROID_CREATOR,
-        IPADOS,
         MOBILE,
-        IOS,
         WEB,
         WEB_CREATOR
     )
@@ -71,11 +75,14 @@ object YTPlayerUtils {
      * These are tried first when age-restriction is detected.
      */
     private val AGE_RESTRICTED_CLIENTS: Array<YouTubeClient> = arrayOf(
+        TV_EMBEDDED,
         TVHTML5_SIMPLY_EMBEDDED_PLAYER,
         TVHTML5,
         ANDROID_VR_NO_AUTH,
         ANDROID_VR_1_61_48,
-        ANDROID_VR_1_43_32
+        ANDROID_VR_1_43_32,
+        IOS,
+        IPADOS
     )
     data class PlaybackData(
         val audioConfig: PlayerResponse.PlayerConfig.AudioConfig?,
@@ -187,9 +194,14 @@ object YTPlayerUtils {
                 }
 
                 Timber.tag(logTag).d("Fetching player response for fallback client: ${client.clientName}")
-                // Use poToken for web-based clients
+                // Use poToken for web-based and TV clients
                 val usePoToken = poToken?.takeIf {
-                    client.clientName.contains("WEB") || client.clientName.contains("TVHTML5") 
+                    client.clientName.contains("WEB") || 
+                    client.clientName.contains("TVHTML5") ||
+                    client.clientName.contains("TV")
+                }
+                if (usePoToken != null) {
+                    Timber.tag(logTag).d("Using poToken for client: ${client.clientName}")
                 }
                 streamPlayerResponse =
                     YouTube.player(videoId, playlistId, client, signatureTimestamp, usePoToken).getOrNull()
@@ -294,14 +306,24 @@ object YTPlayerUtils {
         val status = response.playabilityStatus.status
         val reason = response.playabilityStatus.reason?.lowercase() ?: ""
         
-        return status != "OK" && (
-            reason.contains("age") ||
-            reason.contains("sign in") ||
-            reason.contains("login") ||
-            reason.contains("confirm") ||
-            reason.contains("restricted") ||
-            reason.contains("verify")
+        // Check for age-restriction indicators
+        val ageKeywords = listOf(
+            "age", "sign in", "login", "confirm", "restricted", "verify",
+            "mature", "adult", "18+", "inappropriate", "sensitive",
+            "community guidelines", "content warning"
         )
+        
+        val isAgeRestricted = status != "OK" && ageKeywords.any { keyword ->
+            reason.contains(keyword)
+        }
+        
+        // Also check for specific status codes
+        val isLoginRequired = status == "LOGIN_REQUIRED" || 
+            status == "CONTENT_CHECK_REQUIRED" ||
+            status == "AGE_CHECK_REQUIRED" ||
+            status == "UNPLAYABLE"
+        
+        return isAgeRestricted || isLoginRequired
     }
     
     /**
