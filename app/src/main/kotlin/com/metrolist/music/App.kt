@@ -77,28 +77,23 @@ class App : Application(), SingletonImageLoader.Factory {
     }
     
     private fun initializePoTokenGenerator() {
-        // Disable internal PoToken generator for now as it causes issues
-        // The WebView-based generator needs to run on main thread but is called from coroutines
-        // which causes deadlocks. Will be fixed in a future update.
-        PoTokenProvider.useInternalGenerator = false
-        Timber.d("PoToken internal generator disabled - using fallback clients instead")
-        
-        // TODO: Implement proper async PoToken generation
-        // try {
-        //     poTokenGenerator = PoTokenGenerator(this)
-        //     PoTokenProvider.internalGenerator = object : PoTokenProvider.InternalPoTokenGenerator {
-        //         override fun generatePoToken(videoId: String, sessionId: String): Pair<String, String>? {
-        //             return poTokenGenerator?.getWebClientPoToken(videoId, sessionId)?.let {
-        //                 Pair(it.playerRequestPoToken, it.streamingDataPoToken)
-        //             }
-        //         }
-        //     }
-        //     PoTokenProvider.useInternalGenerator = true
-        //     Timber.d("PoToken generator initialized successfully")
-        // } catch (e: Exception) {
-        //     Timber.e(e, "Failed to initialize PoToken generator")
-        //     PoTokenProvider.useInternalGenerator = false
-        // }
+        // Initialize internal PoToken generator using synchronous CountDownLatch approach
+        // This avoids deadlocks that occurred with the previous coroutine-based implementation
+        try {
+            poTokenGenerator = PoTokenGenerator(this)
+            PoTokenProvider.internalGenerator = object : PoTokenProvider.InternalPoTokenGenerator {
+                override fun generatePoToken(videoId: String, sessionId: String): Pair<String, String>? {
+                    return poTokenGenerator?.getWebClientPoToken(videoId, sessionId)?.let {
+                        Pair(it.playerPoToken, it.streamingPoToken)
+                    }
+                }
+            }
+            PoTokenProvider.useInternalGenerator = true
+            Timber.d("PoToken generator initialized successfully")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to initialize PoToken generator")
+            PoTokenProvider.useInternalGenerator = false
+        }
     }
     
     private suspend fun initializeSettings() {
