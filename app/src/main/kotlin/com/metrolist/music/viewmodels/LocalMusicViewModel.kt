@@ -20,7 +20,7 @@ class LocalMusicViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             // Проверяем, не импортирована ли уже эта песня
             val existingSong = database.query {
-                songById(localSong.id)
+                getSongById(localSong.id)
             }
             
             if (existingSong == null) {
@@ -40,11 +40,6 @@ class LocalMusicViewModel @Inject constructor(
                 // Добавляем в базу данных
                 database.query {
                     insert(songEntity)
-                }
-                
-                // Создаём связь с артистом
-                if (localSong.artist.isNotBlank() && localSong.artist != "Unknown Artist") {
-                    // Можно добавить логику создания артиста и связи
                 }
             }
         }
