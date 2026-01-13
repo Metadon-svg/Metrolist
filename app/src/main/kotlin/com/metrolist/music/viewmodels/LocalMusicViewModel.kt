@@ -19,9 +19,7 @@ class LocalMusicViewModel @Inject constructor(
     fun importSong(localSong: LocalSong) {
         viewModelScope.launch(Dispatchers.IO) {
             // Проверяем, не импортирована ли уже эта песня
-            val existingSong = database.query {
-                getSongById(localSong.id)
-            }
+            val existingSong = database.getSongById(localSong.id)
             
             if (existingSong == null) {
                 // Создаём сущность для локальной песни
@@ -29,7 +27,7 @@ class LocalMusicViewModel @Inject constructor(
                     id = localSong.id,
                     title = localSong.title,
                     duration = localSong.duration,
-                    thumbnailUrl = null, // Можно добавить логику извлечения обложки
+                    thumbnailUrl = null,
                     albumId = null,
                     albumName = localSong.album,
                     isLocal = true,
