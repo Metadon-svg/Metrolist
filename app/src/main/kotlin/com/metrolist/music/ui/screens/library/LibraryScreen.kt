@@ -6,15 +6,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.metrolist.music.R
-import com.metrolist.music.ui.component.NavigationTabRow
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -33,28 +37,57 @@ fun LibraryScreen(
     val coroutineScope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        NavigationTabRow(
-            titles = tabNames.map { stringResource(it) },
+        // Используем стандартный TabRow, раз NavigationTabRow не найден
+        ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
-            onTabSelected = { index ->
-                coroutineScope.launch {
-                    pagerState.animateScrollToPage(index)
+            containerColor = MaterialTheme.colorScheme.background,
+            contentColor = MaterialTheme.colorScheme.contentColorFor(MaterialTheme.colorScheme.background),
+            edgePadding = 16.dp,
+            indicator = { tabPositions ->
+                if (pagerState.currentPage < tabPositions.size) {
+                    TabRowDefaults.SecondaryIndicator(
+                        Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
+            },
+            divider = {}
+        ) {
+            tabNames.forEachIndexed { index, titleRes ->
+                Tab(
+                    selected = pagerState.currentPage == index,
+                    onClick = {
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(index)
+                        }
+                    },
+                    text = { Text(text = stringResource(titleRes)) }
+                )
             }
-        )
+        }
 
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
         ) { page ->
             when (page) {
                 0 -> LibrarySongsScreen(
                     navController = navController,
-                    onDeselect = { /* Handle deselect if needed */ }
+                    onDeselect = { } // Добавлен пустой параметр
                 )
-                1 -> LibraryArtistsScreen(navController = navController)
-                2 -> LibraryAlbumsScreen(navController = navController)
-                3 -> LibraryPlaylistsScreen(navController = navController)
+                1 -> LibraryArtistsScreen(
+                    navController = navController,
+                    onDeselect = { } // Добавлен пустой параметр
+                )
+                2 -> LibraryAlbumsScreen(
+                    navController = navController,
+                    onDeselect = { } // Добавлен пустой параметр
+                )
+                3 -> LibraryPlaylistsScreen(
+                    navController = navController,
+                    onDeselect = { }, // Добавлен пустой параметр
+                    filterContent = { } // Добавлен пустой параметр для фильтров
+                )
             }
         }
     }
