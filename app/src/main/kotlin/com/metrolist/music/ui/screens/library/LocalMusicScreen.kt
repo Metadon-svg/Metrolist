@@ -24,8 +24,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.metrolist.music.R
-import com.metrolist.music.db.entities.SongEntity
-import java.time.LocalDateTime
+import com.metrolist.music.viewmodels.LocalMusicViewModel
 
 data class LocalSong(
     val id: String,
