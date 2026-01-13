@@ -71,6 +71,17 @@
     <string name="import_music_success">Music imported successfully</string>
     <string name="import_music_failed">Failed to import music</string>
 
+    <!-- Local Music - NEW STRINGS FOR LOCAL MUSIC FEATURE -->
+    <string name="local_music">Local Music</string>
+    <string name="local_files">Local Files</string>
+    <string name="permission_required">Permission Required</string>
+    <string name="permission_description">To access local music, permission to read audio files is required</string>
+    <string name="grant_permission">Grant Permission</string>
+    <string name="no_local_music_found">No local music found</string>
+    <string name="scanning_local_music">Scanning local music…</string>
+    <string name="imported_successfully">Imported successfully</string>
+    <string name="import_all">Import All</string>
+
     <!-- Artist screen -->
     <string name="from_your_library">From your library</string>
 
