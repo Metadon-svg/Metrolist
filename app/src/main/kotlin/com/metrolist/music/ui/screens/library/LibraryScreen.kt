@@ -12,6 +12,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
+import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -37,11 +38,11 @@ fun LibraryScreen(
     val coroutineScope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Используем стандартный TabRow, раз NavigationTabRow не найден
+        // Используем стандартный ScrollableTabRow вместо отсутствующего NavigationTabRow
         ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
             containerColor = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.contentColorFor(MaterialTheme.colorScheme.background),
+            contentColor = contentColorFor(MaterialTheme.colorScheme.background),
             edgePadding = 16.dp,
             indicator = { tabPositions ->
                 if (pagerState.currentPage < tabPositions.size) {
@@ -73,20 +74,19 @@ fun LibraryScreen(
             when (page) {
                 0 -> LibrarySongsScreen(
                     navController = navController,
-                    onDeselect = { } // Добавлен пустой параметр
+                    onDeselect = { } // Песни требуют onDeselect
                 )
                 1 -> LibraryArtistsScreen(
                     navController = navController,
-                    onDeselect = { } // Добавлен пустой параметр
+                    onDeselect = { } // Артисты требуют onDeselect
                 )
                 2 -> LibraryAlbumsScreen(
                     navController = navController,
-                    onDeselect = { } // Добавлен пустой параметр
+                    onDeselect = { } // Альбомы требуют onDeselect
                 )
                 3 -> LibraryPlaylistsScreen(
                     navController = navController,
-                    onDeselect = { }, // Добавлен пустой параметр
-                    filterContent = { } // Добавлен пустой параметр для фильтров
+                    filterContent = { } // Плейлисты требуют filterContent, но НЕ onDeselect
                 )
             }
         }
