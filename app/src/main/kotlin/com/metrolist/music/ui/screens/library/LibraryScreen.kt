@@ -32,13 +32,13 @@ fun LibraryScreen(
         R.string.artists,
         R.string.albums,
         R.string.playlists,
+        R.string.local_files, // Новая вкладка
     )
 
     val pagerState = rememberPagerState(pageCount = { tabNames.size })
     val coroutineScope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Используем стандартный ScrollableTabRow вместо отсутствующего NavigationTabRow
         ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
             containerColor = MaterialTheme.colorScheme.background,
@@ -74,19 +74,22 @@ fun LibraryScreen(
             when (page) {
                 0 -> LibrarySongsScreen(
                     navController = navController,
-                    onDeselect = { } // Песни требуют onDeselect
+                    onDeselect = { }
                 )
                 1 -> LibraryArtistsScreen(
                     navController = navController,
-                    onDeselect = { } // Артисты требуют onDeselect
+                    onDeselect = { }
                 )
                 2 -> LibraryAlbumsScreen(
                     navController = navController,
-                    onDeselect = { } // Альбомы требуют onDeselect
+                    onDeselect = { }
                 )
                 3 -> LibraryPlaylistsScreen(
                     navController = navController,
-                    filterContent = { } // Плейлисты требуют filterContent, но НЕ onDeselect
+                    filterContent = { }
+                )
+                4 -> LocalMusicScreen( // Новый экран локальной музыки
+                    navController = navController
                 )
             }
         }
