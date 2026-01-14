@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Основная тема приложения -->
-    <style name="Theme.Metrolist" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- Используем Theme.AppCompat, так как она точно есть в зависимостях -->
+    <style name="Theme.Metrolist" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- Цвета статус-бара и навигации -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        
+        <!-- Для светлой темы иконок в статус-баре (API 23+) -->
         <item name="android:windowLightStatusBar">true</item>
     </style>
 
