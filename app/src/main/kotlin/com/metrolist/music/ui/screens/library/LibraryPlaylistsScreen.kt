@@ -5,6 +5,11 @@
 
 package com.metrolist.music.ui.screens.library
 
+import android.Manifest
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -16,6 +21,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -43,6 +49,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -100,12 +108,32 @@ fun LibraryPlaylistsScreen(
     initialTextFieldValue: String? = null,
     allowSyncing: Boolean = true,
 ) {
+    val context = LocalContext.current
     val menuState = LocalMenuState.current
     val haptic = LocalHapticFeedback.current
 
     val coroutineScope = rememberCoroutineScope()
 
-    // Pull-to-refresh state
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.importLocalMusic()
+            Toast.makeText(context, context.getString(R.string.scanning_local_music), Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, context.getString(R.string.permission_required_local), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val onLocalMusicClick = {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        permissionLauncher.launch(permission)
+    }
+
     var isRefreshing by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullToRefreshState()
 
@@ -182,6 +210,17 @@ fun LibraryPlaylistsScreen(
             songThumbnails = emptyList(),
         )
 
+    val localFilesPlaylist = remember {
+        Playlist(
+            playlist = PlaylistEntity(
+                id = "local_files_button",
+                name = context.getString(R.string.local_files)
+            ),
+            songCount = 0,
+            songThumbnails = emptyList()
+        )
+    }
+
     val (showLiked) = rememberPreference(ShowLikedPlaylistKey, true)
     val (showDownloaded) = rememberPreference(ShowDownloadedPlaylistKey, true)
     val (showTop) = rememberPreference(ShowTopPlaylistKey, true)
@@ -199,8 +238,6 @@ fun LibraryPlaylistsScreen(
     val isLoggedIn = remember(innerTubeCookie) {
         "SAPISID" in parseCookieString(innerTubeCookie)
     }
-
-    // Removed automatic sync on screen entry - use pull-to-refresh instead
 
     LaunchedEffect(scrollToTop?.value) {
         if (scrollToTop?.value == true) {
@@ -302,6 +339,22 @@ fun LibraryPlaylistsScreen(
                         contentType = CONTENT_TYPE_HEADER,
                     ) {
                         headerContent()
+                    }
+
+                    item(
+                        key = "localFilesPlaylist",
+                        contentType = { CONTENT_TYPE_PLAYLIST },
+                    ) {
+                        PlaylistListItem(
+                            playlist = localFilesPlaylist,
+                            autoPlaylist = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onLocalMusicClick()
+                                }
+                                .animateItem(),
+                        )
                     }
 
                     if (showLiked) {
@@ -453,6 +506,25 @@ fun LibraryPlaylistsScreen(
                         contentType = CONTENT_TYPE_HEADER,
                     ) {
                         headerContent()
+                    }
+
+                    item(
+                        key = "localFilesPlaylist",
+                        contentType = { CONTENT_TYPE_PLAYLIST },
+                    ) {
+                        PlaylistGridItem(
+                            playlist = localFilesPlaylist,
+                            fillMaxWidth = true,
+                            autoPlaylist = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = {
+                                        onLocalMusicClick()
+                                    },
+                                )
+                                .animateItem(),
+                        )
                     }
 
                     if (showLiked) {
