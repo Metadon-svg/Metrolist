@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Разрешения для чтения локальной музыки -->
+    <!-- Разрешения для локальной музыки -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
@@ -117,7 +117,7 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Исправленные иконки: ссылаются на ic_launcher вместо ic_launcher_default -->
+        <!-- Исправлено: теперь ссылается на ic_launcher, который точно существует -->
         <activity-alias
             android:name=".MainActivityAlias"
             android:targetActivity=".MainActivity"
