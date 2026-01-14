@@ -36,7 +36,7 @@ import java.time.LocalDateTime
 import javax.inject.Inject
 
 @HiltViewModel
-class LibraryPlaylistsViewModel
+class LocalPlaylistViewModel
 @Inject
 constructor(
     @ApplicationContext private val context: Context,
